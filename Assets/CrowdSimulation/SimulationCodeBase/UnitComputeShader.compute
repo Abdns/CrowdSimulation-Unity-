@@ -1,0 +1,64 @@
+#pragma kernel CSMain
+
+struct UnitData
+{
+    float3 velocity;
+    float3 position;
+    float skin;
+    float animationSpeed;
+};
+
+#define SIMULATION_BLOCK_SIZE 128
+
+RWStructuredBuffer<UnitData> _UnitDataBufferWrite;
+
+int _MaxBoidObjectNum;
+float4 _BoundCenter;
+float4 _BoundSize;
+float _DeltaTime;
+float _MaxSpeed;
+
+
+
+        float3 ClampSpeed(float3 vec, float max)
+        {
+            float length = sqrt(dot(vec, vec));
+            return (length > max && length > 0) ? vec.xyz * (max / length) : vec.xyz;
+        }
+
+        float3 ClampInBounds(float3 position)
+        {
+            float3 pos = position;
+            float3 cubeCenter = _BoundCenter.xyz;
+            float3 cubeSize = _BoundSize.xyz;
+    
+            float3 min = cubeCenter - cubeSize * 0.5;
+            float3 max = cubeCenter + cubeSize * 0.5;
+    
+            pos.x = pos.x < min.x ? float3(cubeCenter + cubeSize * 0.5).x : pos.x;
+            pos.x = pos.x > max.x ? float3(cubeCenter - cubeSize * 0.5).x : pos.x;
+    
+            pos.z = pos.z < min.z ? float3(cubeCenter + cubeSize * 0.5).z : pos.z;
+            pos.z = pos.z > max.z ? float3(cubeCenter - cubeSize * 0.5).z : pos.z;
+    
+            return pos;
+
+        }
+
+        groupshared UnitData unit_data[SIMULATION_BLOCK_SIZE];
+
+        [numthreads(SIMULATION_BLOCK_SIZE, 1, 1)]
+        void CSMain (uint3 DTid : SV_DispatchThreadID, uint3 Gid : SV_GroupID, uint3 GTid : SV_GroupThreadID, uint GI : SV_GroupIndex)
+        {
+            const unsigned int P_ID = DTid.x;									           
+            UnitData unitData = _UnitDataBufferWrite[P_ID];
+	
+            unitData.position = ClampInBounds(unitData.position);
+            unitData.velocity = ClampSpeed(unitData.velocity, _MaxSpeed);
+            unitData.position += unitData.velocity * _DeltaTime;
+											           
+            _UnitDataBufferWrite[P_ID] = unitData;
+	        
+        }
+
+   
